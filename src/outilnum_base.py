@@ -8,15 +8,16 @@ Date: 29/01/2020
 Version: 1.0
 
 Date    | Auth. | Vers.  |  Comments
-29/01/20  ALl     1.0       Initialization
-
+29/01/20   ALl     1.0       Initialization
+06/02/20   MWi     2.0       Complete attenue
 
 """
 
 import numpy as np
 # import RTAudioProc as rt
-from BlockProc import *
-from AudioCallback import *
+from src.BlockProc import *
+from src.AudioCallback import *
+from src.Wiener import *
 import scipy.io.wavfile as wavfile
 import scipy.stats as scistat
 import matplotlib.pyplot as plt
@@ -36,7 +37,7 @@ import time
 noise_s = 'cafet'
 
 # ---- PATH ------------------------------------------------------------
-folder_stim = 'resources/samples'
+folder_stim = '../resources/samples'
 
 # ---- GENERAL
 RATE = 16000
@@ -65,23 +66,39 @@ elif noise_s == 'cafet':
 stim_v = copy.copy(src_v)
 stim_v += nse_v
 stim = AudioCallback(stim_v, buf_size)
+ntim = AudioCallback(nse_v, buf_size)
+srctim = AudioCallback(src_v, buf_size)
 
 # ====== DEFINE PROCESS ========
-bloc = BlockProc(nb_buffsamp=buf_size, nb_channels_inp=1, nb_channels_out=1)
-
+bloc_stim = BlockProc(nb_buffsamp=buf_size, nb_channels_inp=1, nb_channels_out=1)
+bloc_src = BlockProc(nb_buffsamp=buf_size, nb_channels_inp=1, nb_channels_out=1)
+bloc_nse = BlockProc(nb_buffsamp=buf_size, nb_channels_inp=1, nb_channels_out=1)
+wiener = Wiener(nb_fft, RATE, win_size)
 # ============= PROCESS ===============================
 src_est_v = np.zeros(stim_v.shape)
 for ii in range(nb_buf):
     bfr_inp = stim.readframes()
-    frm_inp = bloc.input2frame(bfr_inp)
+    frm_inp = bloc_stim.input2frame(bfr_inp)
     fft_inp = u.time2freq(frm_inp, nb_fft)
 
+    # SRC
+    bfr_src = srctim.readframes()
+    frm_src = bloc_src.input2frame(bfr_src)
+    fft_src = u.time2freq(frm_src, nb_fft)
+    # noise
+    bfr_nse = ntim.readframes()
+    frm_nse = bloc_nse.input2frame(bfr_nse)
+    fft_nse = u.time2freq(frm_nse, nb_fft)
+
     # TODO: INSERT THE PROCESSING HERE
-    fft_out = fft_inp
+    fft_out = wiener.process(fft_inp, fft_src, fft_nse)
+    # fft_out = fft_inp
 
     frm_out = u.freq2time(fft_out)
-    bfr_out = bloc.frame2output(frm_out)
+    bfr_out = bloc_stim.frame2output(frm_out)
     src_est_v[ii * buf_size:(ii + 1) * buf_size] = bfr_out[:, 0]
+
+src_est_v = src_est_v / np.max(np.abs(src_est_v)) * np.max(np.abs(src_v))
 
 # ======== RESULTS ===================
 ref_srcs = np.hstack((src_v[:, None], nse_v[:, None])).T
@@ -96,5 +113,5 @@ sd.play(stim_v, samplerate=RATE, blocking=True)
 sd.play(src_est_v, samplerate=RATE, blocking=True)
 
 print('------------- SAVE --------------------------------')
-wavfile.write(os.path.join('resources', 'output', 'speech_noise.wav'), rate=RATE, data=stim_v)
-wavfile.write(os.path.join('resources', 'output', 'speech_clean.wav'), rate=RATE, data=src_est_v)
+wavfile.write(os.path.join('../resources', 'output', 'speech_noise.wav'), rate=RATE, data=stim_v)
+wavfile.write(os.path.join('../resources', 'output', 'speech_clean.wav'), rate=RATE, data=src_est_v)
