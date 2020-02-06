@@ -9,6 +9,7 @@ Version: 1.0
 
 Date    | Auth. | Vers.  |  Comments
 30/01/20  VPe     1.0       Initialization
+06/02/20  VPe     2.0       added class Fontaine débruitage un peu
 
 
 
@@ -19,25 +20,49 @@ import sys
 import scipy.stats as scistat
 
 class Fontaine:
-    def __init__(alpha,N,l,f,gamma):
-        self.N=N
-        self.S=zeros(F,N)
-        self.alpha=alpha
-        self.l=l
-        self.f=f
-        self.gamma=0.5772156 #contante d'Euler
-        
-    def estimation(s):
-        for i in range(l-self.N,self.l+1):
-            sigmac2_s+=abs(s(i,self.f))**2
-        return (1/self.N)*sigmac2_s
-    
-    def process(x,s,n):
-        self.S=[self.s(),s]
-        #estimation
-        lambdac_s=np.exp((1/self.alpha)*estimation(ln(abs(self.s)))+self.gamma*(1-1/self.alpha))
-        phic=scistat.levy.median(loc=0,scale=1) #diffère suivant les valeurs de alpha
-        #filtrage
-        w=(phic*lambdac_s**2)/(phic*lambdac_s**2+phic*lambdan**2)
-        sc=numpy.convolve(w,x)
-        return sc
+        def __init__(self, nb_fft, RATE, win_size, delta_n=0.16, delta_s=0.09, alpha_n=1.8, alpha_s=1.2):
+            # PARAMETERS
+            if np.mod(nb_fft, 2) == 0:  # Even
+                nb_frq = nb_fft // 2 + 1
+            else:
+                nb_frq = nb_fft // 2
+
+            self.alpha_s = alpha_s
+            self.alpha_n = alpha_n
+
+            self.gamma = np.euler_gamma  # constante d'Euler
+
+            self.N_n = int(delta_n * 2 * RATE / win_size)
+
+            self.N_s = int(delta_s * 2 * RATE / win_size)
+
+            self.s_m = np.zeros((nb_frq, self.N_s), complex)
+            self.n_m = np.zeros((nb_frq, self.N_n), complex)
+
+        def process(self, x_v, s_v, n_v):
+            # estimation
+            self.s_m = np.concatenate((self.s_m[:, 1:], s_v), axis=1)
+            self.n_m = np.concatenate((self.n_m[:, 1:], n_v), axis=1)
+
+            lambda_s_v = np.exp((1 / self.alpha_s) * np.mean(np.log(np.abs(self.s_m)), axis=1) + self.gamma * (1 - 1 / self.alpha_s))
+            lambda_n_v = np.exp((1 / self.alpha_n) * np.mean(np.log(np.abs(self.n_m)), axis=1) + self.gamma * (1 - 1 / self.alpha_n))
+
+            phi_s_f = scistat.levy.median(loc=0, scale=2 * np.cos(np.pi * self.alpha_s / 4)**(2/self.alpha_s))
+            phi_n_f = scistat.levy.median(loc=0, scale=2 * np.cos(np.pi * self.alpha_n / 4)**(2/self.alpha_n))
+
+            # filter
+            w_v = (phi_s_f * lambda_s_v**2) / (phi_s_f * lambda_s_v**2 + phi_n_f * lambda_n_v**2)
+
+            # w_v[w_v < u.db2mag(-40)] = u.db2mag(-40)
+            # plt.clf()
+            # plt.plot(sigma_s2_v)
+            # plt.plot(sigma_n2_v)
+            # plt.draw()
+            # plt.pause(0.001)
+            # plt.clf()
+            # plt.plot(w_v)
+            # plt.draw()
+            # plt.pause(0.001)
+
+            return w_v * x_v
+
