@@ -23,7 +23,7 @@ import scipy.stats as scistat
 import matplotlib.pyplot as plt
 from matplotlib.colors import Colormap
 import matplotlib.cm as cm
-import utils_llave as u
+import src.utils_hack as u
 import sounddevice as sd
 import copy
 from scipy.io import wavfile
@@ -73,45 +73,66 @@ srctim = AudioCallback(src_v, buf_size)
 bloc_stim = BlockProc(nb_buffsamp=buf_size, nb_channels_inp=1, nb_channels_out=1)
 bloc_src = BlockProc(nb_buffsamp=buf_size, nb_channels_inp=1, nb_channels_out=1)
 bloc_nse = BlockProc(nb_buffsamp=buf_size, nb_channels_inp=1, nb_channels_out=1)
-fontaine = Fontaine(nb_fft, RATE, win_size)
-# ============= PROCESS ===============================
-src_est_v = np.zeros(stim_v.shape)
-for ii in range(nb_buf):
-    bfr_inp = stim.readframes()
-    frm_inp = bloc_stim.input2frame(bfr_inp)
-    fft_inp = u.time2freq(frm_inp, nb_fft)
 
-    # SRC
-    bfr_src = srctim.readframes()
-    frm_src = bloc_src.input2frame(bfr_src)
-    fft_src = u.time2freq(frm_src, nb_fft)
-    # noise
-    bfr_nse = ntim.readframes()
-    frm_nse = bloc_nse.input2frame(bfr_nse)
-    fft_nse = u.time2freq(frm_nse, nb_fft)
+SIR = []
+SDR = []
+SAR = []
 
-    # TODO: INSERT THE PROCESSING HERE
-    fft_out = fontaine.process(fft_inp, fft_src, fft_nse)
-    # fft_out = fft_inp
+alph = np.linspace(0.8, 1.5, 10)
+print(alph)
+for aln in alph:
+    fontaine = Fontaine(nb_fft, RATE, win_size, 0.16, 0.09, aln, 1.2)
+    # ============= PROCESS ===============================
+    src_est_v = np.zeros(stim_v.shape)
+    stim.reset()
+    fontaine.reset()
+    for ii in range(nb_buf):
+        bfr_inp = stim.readframes()
+        frm_inp = bloc_stim.input2frame(bfr_inp)
+        fft_inp = u.time2freq(frm_inp, nb_fft)
 
-    frm_out = u.freq2time(fft_out)
-    bfr_out = bloc_stim.frame2output(frm_out)
-    src_est_v[ii * buf_size:(ii + 1) * buf_size] = bfr_out[:, 0]
+        # SRC
+        bfr_src = srctim.readframes()
+        frm_src = bloc_src.input2frame(bfr_src)
+        fft_src = u.time2freq(frm_src, nb_fft)
+        # noise
+        bfr_nse = ntim.readframes()
+        frm_nse = bloc_nse.input2frame(bfr_nse)
+        fft_nse = u.time2freq(frm_nse, nb_fft)
 
-src_est_v = src_est_v / np.max(np.abs(src_est_v)) * np.max(np.abs(src_v))
+        # TODO: INSERT THE PROCESSING HERE
+        fft_out = fontaine.process(fft_inp, fft_src, fft_nse)
+        # fft_out = fft_inp
 
-# ======== RESULTS ===================
-ref_srcs = np.hstack((src_v[:, None], nse_v[:, None])).T
-est_srcs = np.hstack((src_est_v[:, None], nse_v[:, None])).T
-sdr, sir, sar, popt = me.separation.bss_eval_sources(ref_srcs, est_srcs)
-print('SDR:\n--- SRC: %.0f dB\n--- NSE: %.0f dB' % (sdr[0], sdr[1]))
-print('SIR:\n--- SRC: %.0f dB\n--- NSE: %.0f dB' % (sir[0], sir[1]))
-print('SAR:\n--- SRC: %.0f dB\n--- NSE: %.0f dB' % (sar[0], sar[1]))
+        frm_out = u.freq2time(fft_out)
+        bfr_out = bloc_stim.frame2output(frm_out)
+        src_est_v[ii * buf_size:(ii + 1) * buf_size] = bfr_out[:, 0]
 
-print('----------- PLAY -------------------------------')
-sd.play(stim_v, samplerate=RATE, blocking=True)
-sd.play(src_est_v, samplerate=RATE, blocking=True)
+    src_est_v = src_est_v / np.max(np.abs(src_est_v)) * np.max(np.abs(src_v))
 
-print('------------- SAVE --------------------------------')
-wavfile.write(os.path.join('../resources', 'output', 'speech_noise.wav'), rate=RATE, data=stim_v)
-wavfile.write(os.path.join('../resources', 'output', 'speech_clean.wav'), rate=RATE, data=src_est_v)
+    # ======== RESULTS ===================
+    ref_srcs = np.hstack((src_v[:, None], nse_v[:, None])).T
+    est_srcs = np.hstack((src_est_v[:, None], nse_v[:, None])).T
+    sdr, sir, sar, popt = me.separation.bss_eval_sources(ref_srcs, est_srcs)
+    SIR.append(sir[0])
+    SDR.append(sdr[0])
+    SAR.append(sar[0])
+
+plt.plot(alph, SIR)
+plt.show()
+plt.plot(alph, SAR)
+plt.show()
+plt.plot(alph, SDR)
+plt.show()
+
+# print('SDR:\n--- SRC: %.0f dB\n--- NSE: %.0f dB' % (sdr[0], sdr[1]))
+# print('SIR:\n--- SRC: %.0f dB\n--- NSE: %.0f dB' % (sir[0], sir[1]))
+# print('SAR:\n--- SRC: %.0f dB\n--- NSE: %.0f dB' % (sar[0], sar[1]))
+#
+# print('----------- PLAY -------------------------------')
+# sd.play(stim_v, samplerate=RATE, blocking=True)
+# sd.play(src_est_v, samplerate=RATE, blocking=True)
+#
+# print('------------- SAVE --------------------------------')
+# wavfile.write(os.path.join('../resources', 'output', 'speech_noise.wav'), rate=RATE, data=stim_v)
+# wavfile.write(os.path.join('../resources', 'output', 'speech_clean.wav'), rate=RATE, data=src_est_v)

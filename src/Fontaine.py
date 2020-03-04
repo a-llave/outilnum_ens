@@ -21,13 +21,14 @@ import scipy.stats as scistat
 
 
 class Fontaine:
-        def __init__(self, nb_fft, RATE, win_size, delta_n=0.16, delta_s=0.09, alpha_n=1.8, alpha_s=1.2):
+       # def __init__(self, nb_fft, RATE, win_size, delta_n=0.16, delta_s=0.09, alpha_n=1.8, alpha_s=1.2):
+        def __init__(self, nb_fft, RATE, win_size, delta_n, delta_s, alpha_n, alpha_s):
             # PARAMETERS
             if np.mod(nb_fft, 2) == 0:  # Even
                 nb_frq = nb_fft // 2 + 1
             else:
                 nb_frq = nb_fft // 2
-
+            self.nb_frq = nb_frq
             self.alpha_s = alpha_s
             self.alpha_n = alpha_n
 
@@ -67,4 +68,9 @@ class Fontaine:
             # plt.pause(0.001)
             s_estim_v = w_v[:, None] * x_v
             return s_estim_v
+
+        def reset(self):
+            self.s_m = np.zeros((self.nb_frq, self.N_s), complex)
+            self.n_m = np.zeros((self.nb_frq, self.N_n), complex)
+            return
 
